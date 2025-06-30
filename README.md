@@ -2,7 +2,7 @@
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/PhiFever/AfdianToMarkdown/total)
 ## AfdianToMarkdown
 
-爱发电(afdian.com)爬虫，用于下载爱发电作者的动态和作品集并保存为markdown文件（目前只能保存纯文本内容，不支持保存图片）。
+爱发电(afdian.com)爬虫，用于下载爱发电作者的动态和作品集并保存为markdown文件，现已支持下载图片和视频资源。
 
 **！！！该软件不能直接帮你免费爬取订阅后才能查看的内容！！！**
 
@@ -83,6 +83,10 @@ $ .\AfdianToMarkdown.exe -h
 
 1. 添加了下载任意作者的单个作品集的功能
 2. 添加在下载时不下载评论区的控制参数
+
+#### v0.6.0
+
+1. 新增视频下载功能，支持在Markdown中嵌入本地视频文件
 
 #### v0.4.0
 增加了对于含图片作品集的支持

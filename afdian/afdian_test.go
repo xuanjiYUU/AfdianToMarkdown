@@ -4,6 +4,11 @@ import (
 	"AfdianToMarkdown/logger"
 	"AfdianToMarkdown/utils"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/stretchr/testify/assert"
 	"github.com/tidwall/gjson"
@@ -234,4 +239,37 @@ func Test_getCommentString(t *testing.T) {
 			assert.Equalf(t, tt.want, getCommentString(tt.args.commentJson), "getCommentString(%v)", tt.args.commentJson)
 		})
 	}
+}
+
+func Test_parseVideoField(t *testing.T) {
+	json1 := gjson.Parse(`{"videos":["https://example.com/a.mp4","https://example.com/b.webm"]}`)
+	videos1 := parseVideoField(json1)
+	assert.Equal(t, []string{"https://example.com/a.mp4", "https://example.com/b.webm"}, videos1)
+
+	json2 := gjson.Parse(`{"video_list":[{"url":"https://example.com/c.mp4"}]}`)
+	videos2 := parseVideoField(json2)
+	assert.Equal(t, []string{"https://example.com/c.mp4"}, videos2)
+}
+
+func Test_getVideos(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("video"))
+	}))
+	defer ts.Close()
+
+	post := Post{
+		Name:   "test",
+		Url:    "",
+		Videos: []string{ts.URL + "/v.mp4"},
+	}
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "a.md")
+	os.WriteFile(filePath, []byte(""), os.ModePerm)
+
+	content, err := getVideos(filePath, post)
+	assert.NoError(t, err)
+	expectedFile := filepath.Join(tmpDir, utils.ImgDir, utils.ToSafeFilename(post.Name)+"_0.mp4")
+	assert.FileExists(t, expectedFile)
+	rel := filepath.Join(utils.ImgDir, utils.ToSafeFilename(post.Name)+"_0.mp4")
+	assert.Contains(t, content, rel)
 }
