@@ -41,6 +41,31 @@ type Post struct {
 	Name     string
 	Url      string
 	Pictures []string
+	Videos   []string
+}
+
+// parseVideoField extracts video URLs from possible fields like "videos" or "video_list"
+func parseVideoField(value gjson.Result) (videos []string) {
+	if arr := value.Get("videos"); arr.Exists() {
+		for _, v := range arr.Array() {
+			if v.IsObject() {
+				videos = append(videos, v.Get("url").String())
+			} else {
+				videos = append(videos, v.String())
+			}
+		}
+		return
+	}
+	if arr := value.Get("video_list"); arr.Exists() {
+		for _, v := range arr.Array() {
+			if v.IsObject() {
+				videos = append(videos, v.Get("url").String())
+			} else {
+				videos = append(videos, v.String())
+			}
+		}
+	}
+	return
 }
 
 // Cookie 从 Chrome 中使用cookie master导出的 Cookies
@@ -177,10 +202,12 @@ func GetMotionUrlList(userName string, cookieString string, prevPublishSn string
 		for _, result := range value.Get("pics").Array() {
 			pictures = append(pictures, result.String())
 		}
+		videos := parseVideoField(value)
 		authorArticleList = append(authorArticleList, Post{
 			Name:     utils.ToSafeFilename(value.Get("title").String()),
 			Url:      articleUrl,
 			Pictures: pictures,
+			Videos:   videos,
 		})
 		return true
 	})
@@ -233,10 +260,12 @@ func GetAlbumPostList(albumId string, cookieString string) (authorUrlSlug string
 			for _, result := range value.Get("pics").Array() {
 				pictures = append(pictures, result.String())
 			}
+			videos := parseVideoField(value)
 			albumPostList = append(albumPostList, Post{
 				Name:     utils.ToSafeFilename(value.Get("title").String()),
 				Url:      postUrl,
 				Pictures: pictures,
+				Videos:   videos,
 			})
 			return true
 		})
@@ -326,10 +355,14 @@ func SavePostIfNotExist(filePath string, article Post, authToken string, disable
 		if err != nil {
 			return err
 		}
+		videoContent, err := getVideos(filePath, article)
+		if err != nil {
+			return err
+		}
 
 		referUrl := strings.Replace(article.Url, "post", "p", 1)
-		articleContent := fmt.Sprintf("## %s\n\n### Refer\n\n%s\n\n### 正文\n\n%s\n\n%s",
-			article.Name, referUrl, content, picContent)
+		articleContent := fmt.Sprintf("## %s\n\n### Refer\n\n%s\n\n### 正文\n\n%s\n\n%s\n\n%s",
+			article.Name, referUrl, content, picContent, videoContent)
 
 		if !disableComment {
 			commentString, hotCommentString := GetPostComment(article.Url, authToken)
@@ -384,4 +417,39 @@ func getPictures(filePath string, article Post) (string, error) {
 		picContent += fmt.Sprintf("![image](%s)\n", relPath)
 	}
 	return picContent, nil
+}
+
+func getVideos(filePath string, article Post) (string, error) {
+	if len(article.Videos) == 0 {
+		return "", nil
+	}
+	assetsDir := filepath.Join(filepath.Dir(filePath), utils.ImgDir)
+	if err := os.MkdirAll(assetsDir, os.ModePerm); err != nil {
+		return "", fmt.Errorf("create assets directory error: %v", err)
+	}
+	videoContent := ""
+	for i, videoUrl := range article.Videos {
+		ext := filepath.Ext(videoUrl)
+		if ext == "" {
+			ext = ".mp4"
+		}
+		localFileName := fmt.Sprintf("%s_%d%s", utils.ToSafeFilename(article.Name), i, ext)
+		localFilePath := filepath.Join(assetsDir, localFileName)
+
+		log.Printf("Downloading video in article %s: %s", article.Name, videoUrl)
+		err := requests.
+			URL(videoUrl).
+			Header("user-agent", ChromeUserAgent).
+			ToFile(localFilePath).
+			Fetch(context.Background())
+		if err != nil {
+			log.Printf("Failed to download video %s: %v", videoUrl, err)
+			videoContent += fmt.Sprintf("<video controls src=\"%s\"></video>\n", videoUrl)
+			continue
+		}
+
+		relPath := filepath.Join(utils.ImgDir, localFileName)
+		videoContent += fmt.Sprintf("<video controls src=\"%s\"></video>\n", relPath)
+	}
+	return videoContent, nil
 }
